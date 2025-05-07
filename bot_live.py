@@ -56,6 +56,7 @@ def get_1st_half_over05_odds(event_id):
 
 def main():
     print("🚀 Bot attivo – LIVE monitoring")
+    send_telegram("✅ Bot LIVE: Test notifica Telegram riuscito!")
     notified = load_notified_ids()
     events = get_live_events()
 
@@ -112,4 +113,6 @@ def main():
         print("❌ File matches.csv mancante.")
 
 if __name__ == "__main__":
-    main()
+    while True:
+        main()
+        time.sleep(30)
