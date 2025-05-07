@@ -90,29 +90,26 @@ def main():
                         home_sim = similar(home, home_live)
                         away_sim = similar(away, away_live)
 
-                        if home_sim >= 0.7 and away_sim >= 0.7:
+                        if home_sim >= 0.6 and away_sim >= 0.6:
                             match_id = ev["id"]
                             if match_id in notified:
                                 continue
 
-                            minute = int(ev.get("time", {}).get("tm", 0))
                             score = ev.get("ss", "0-0")
                             if score != "0-0":
                                 continue
 
+                            minute = int(ev.get("time", {}).get("tm", 0))
                             quota = get_1st_half_over05_odds(match_id)
 
-                            if minute >= 20 or (quota is not None and quota >= 2.00):
+                            if quota is not None and quota >= 2.00:
                                 msg = (
                                     f"⚠️ *PARTITA DA MONITORARE LIVE*\n"
                                     f"{row['Country']} – {row['League']}\n"
                                     f"{row['Home Team']} vs {row['Away Team']}\n"
                                     f"🕒 Minuto: {minute} – Risultato: {score}\n"
-                                    f"🔥 Over 0.5 HT: *{perc:.1f}%*"
+                                    f"🔥 Over 0.5 HT: *{perc:.1f}%* – Quota: {quota}"
                                 )
-                                if quota:
-                                    msg += f" – Quota: {quota}"
-
                                 send_telegram(msg)
                                 save_notified_id(match_id)
                             break
