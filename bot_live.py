@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 import pytz
 import os
+from difflib import SequenceMatcher
 
 # === CONFIG ===
 BETSAPI_KEY = "dbc60aec3b60b57175815ab6f1477348"
@@ -54,6 +55,9 @@ def get_1st_half_over05_odds(event_id):
         return None
     return None
 
+def similar(a, b):
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
 def main():
     print("🔍 Controllo in corso...")
     notified = load_notified_ids()
@@ -63,6 +67,7 @@ def main():
         print("⚠️ Nessun evento live disponibile.")
         return
 
+    print(f"📺 Eventi live trovati: {len(events)}")
     try:
         with open(MATCH_FILE, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -80,7 +85,12 @@ def main():
                         home_live = ev.get("home", {}).get("name", "").lower()
                         away_live = ev.get("away", {}).get("name", "").lower()
 
-                        if home in home_live and away in away_live:
+                        print(f"🔄 LIVE: {home_live} vs {away_live}")
+
+                        home_sim = similar(home, home_live)
+                        away_sim = similar(away, away_live)
+
+                        if home_sim >= 0.7 and away_sim >= 0.7:
                             match_id = ev["id"]
                             if match_id in notified:
                                 continue
