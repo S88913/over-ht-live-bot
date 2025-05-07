@@ -112,11 +112,11 @@ def main():
         print("❌ File matches.csv mancante.")
 
 if __name__ == "__main__":
-    last_log = None
+    last_hour = None
     while True:
         main()
-        now = datetime.now().strftime('%H:%M')
-        if last_log != now:
-            send_telegram(f"🔄 Bot attivo – controllo OK alle {now}")
-            last_log = now
+        current_time = datetime.now().strftime('%H')
+        if current_time != last_hour:
+            send_telegram(f"🔄 Bot attivo – controllo OK alle {datetime.now().strftime('%H:%M')}")
+            last_hour = current_time
         time.sleep(30)
