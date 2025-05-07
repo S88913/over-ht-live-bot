@@ -68,62 +68,70 @@ def main():
         return
 
     print(f"📺 Eventi live trovati: {len(events)}")
-    try:
-        with open(MATCH_FILE, newline='', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    perc_str = row["Over05 FHG HT Average"].replace("%", "").strip()
-                    perc = float(perc_str)
-                    if perc < 85:
-                        continue
 
-                    home = row["Home Team"].strip().lower()
-                    away = row["Away Team"].strip().lower()
-
-                    for ev in events:
-                        home_live = ev.get("home", {}).get("name", "").lower()
-                        away_live = ev.get("away", {}).get("name", "").lower()
-
-                        print(f"🔄 LIVE: {home_live} vs {away_live}")
-
-                        home_sim = similar(home, home_live)
-                        away_sim = similar(away, away_live)
-
-                        if home_sim >= 0.6 and away_sim >= 0.6:
-                            match_id = ev["id"]
-                            if match_id in notified:
-                                continue
-
-                            score = ev.get("ss", "0-0")
-                            if score != "0-0":
-                                continue
-
-                            minute = int(ev.get("time", {}).get("tm", 0))
-                            quota = get_1st_half_over05_odds(match_id)
-
-                            if quota is not None and quota >= 2.00:
-                                msg = (
-                                    f"⚠️ *PARTITA DA MONITORARE LIVE*\n"
-                                    f"{row['Country']} – {row['League']}\n"
-                                    f"{row['Home Team']} vs {row['Away Team']}\n"
-                                    f"🕒 Minuto: {minute} – Risultato: {score}\n"
-                                    f"🔥 Over 0.5 HT: *{perc:.1f}%* – Quota: {quota}"
-                                )
-                                send_telegram(msg)
-                                save_notified_id(match_id)
-                            break
-                except Exception as e:
-                    print("⚠️ Riga saltata:", e)
-    except FileNotFoundError:
+    if not os.path.exists(MATCH_FILE):
         print("❌ File matches.csv mancante.")
+        return
+
+    with open(MATCH_FILE, newline='', encoding='utf-8') as f:
+        reader = list(csv.DictReader(f))
+        if len(reader) == 0:
+            print("⚠️ matches.csv è vuoto.")
+            return
+
+        for row in reader:
+            try:
+                perc_str = row["Over05 FHG HT Average"].replace("%", "").strip()
+                perc = float(perc_str)
+                if perc < 85:
+                    continue
+
+                home = row["Home Team"].strip().lower()
+                away = row["Away Team"].strip().lower()
+
+                for ev in events:
+                    home_live = ev.get("home", {}).get("name", "").lower()
+                    away_live = ev.get("away", {}).get("name", "").lower()
+
+                    print(f"🔄 LIVE: {home_live} vs {away_live}")
+
+                    home_sim = similar(home, home_live)
+                    away_sim = similar(away, away_live)
+
+                    if home_sim >= 0.6 and away_sim >= 0.6:
+                        match_id = ev["id"]
+                        if match_id in notified:
+                            continue
+
+                        score = ev.get("ss", "0-0")
+                        if score != "0-0":
+                            continue
+
+                        minute = int(ev.get("time", {}).get("tm", 0))
+                        quota = get_1st_half_over05_odds(match_id)
+
+                        if quota is not None and quota >= 2.00:
+                            msg = (
+                                f"⚠️ *PARTITA DA MONITORARE LIVE*\n"
+                                f"{row['Country']} – {row['League']}\n"
+                                f"{row['Home Team']} vs {row['Away Team']}\n"
+                                f"🕒 Minuto: {minute} – Risultato: {score}\n"
+                                f"🔥 Over 0.5 HT: *{perc:.1f}%* – Quota: {quota}"
+                            )
+                            send_telegram(msg)
+                            save_notified_id(match_id)
+                        break
+            except Exception as e:
+                print("⚠️ Riga saltata:", e)
 
 if __name__ == "__main__":
+    tz = pytz.timezone("Europe/Rome")
     last_hour = None
     while True:
         main()
-        current_time = datetime.now().strftime('%H')
+        current_time = datetime.now(tz).strftime('%H')
         if current_time != last_hour:
-            send_telegram(f"🔄 Bot attivo – controllo OK alle {datetime.now().strftime('%H:%M')}")
+            ora = datetime.now(tz).strftime('%H:%M')
+            send_telegram(f"🔄 Bot attivo – controllo OK alle {ora}")
             last_hour = current_time
         time.sleep(30)
