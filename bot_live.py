@@ -7,11 +7,13 @@ import os
 
 # === CONFIG ===
 BETSAPI_KEY = "dbc60aec3b60b57175815ab6f1477348"
-API_FOOTBALL_KEY = "f0202fabc0303df003bcca604276ce65"
+APIFOOTBALL_KEY = "f0202fabc0303df003bcca604276ce65"
 BOT_TOKEN = "7892082434:AAF0fZpY1ZCsawGVLDtrGXUbeYWUoCn37Zg"
 CHAT_ID = "6146221712"
 NOTIFIED_FILE = "notified_live.txt"
 MATCH_FILE = "matches.csv"
+MIN_PERCENTAGE = 30
+MIN_ODDS = 1.40
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -37,71 +39,78 @@ def get_live_events():
     try:
         res = requests.get(url)
         return res.json().get("results", [])
-    except:
+    except Exception as e:
+        print("❌ Errore eventi live:", e)
         return []
 
-def get_current_minute(event_time):
+def get_1st_half_over05_odds(event_id):
+    url = f"https://api.b365api.com/v1/bet365/event?token={BETSAPI_KEY}&event_id={event_id}"
     try:
-        parts = event_time.split(":")
-        return int(parts[0])
+        res = requests.get(url)
+        markets = res.json().get("results", {}).get("odds", [])
+        for m in markets:
+            if m.get("name") == "1st Half - Over/Under":
+                for o in m.get("main", []):
+                    if o.get("name") == "Over 0.5":
+                        return float(o.get("odds"))
     except:
-        return -1
+        return None
+    return None
 
-def read_match_file():
-    matches = []
+def main():
+    print("✅ SCRIPT AVVIATO – controllo iniziale")
+    notified = load_notified_ids()
+    events = get_live_events()
+
+    if not events:
+        print("⚠️ Nessun evento live disponibile.")
+        return
+
     try:
-        with open(MATCH_FILE, "r", encoding="utf-8") as f:
+        with open(MATCH_FILE, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                matches.append(row)
-    except Exception as e:
-        print("Errore lettura file CSV:", e)
-    return matches
+                try:
+                    perc_str = row.get("Over05 FHG HT Average", "").replace("%", "").strip()
+                    if not perc_str:
+                        continue
+                    perc = float(perc_str)
+                    if perc < MIN_PERCENTAGE:
+                        continue
 
-def main_loop():
-    print("✅ SCRIPT AVVIATO – controllo iniziale")
-    notified_ids = load_notified_ids()
-    matches = read_match_file()
-    live_events = get_live_events()
+                    home = row["Home Team"].strip().lower()
+                    away = row["Away Team"].strip().lower()
 
-    for match in matches:
-        try:
-            home_team = match["Home"].strip().lower()
-            away_team = match["Away"].strip().lower()
-            match_id = match["id"]
-            prob = int(match["HTOver05Prob"])
-            if prob < 30:  # soglia modificabile
-                continue
+                    for ev in events:
+                        home_live = ev.get("home", {}).get("name", "").lower()
+                        away_live = ev.get("away", {}).get("name", "").lower()
 
-            for event in live_events:
-                home = event["home"]["name"].strip().lower()
-                away = event["away"]["name"].strip().lower()
+                        if home in home_live and away in away_live:
+                            match_id = ev["id"]
+                            if match_id in notified:
+                                continue
 
-                if home_team in home and away_team in away:
-                    score = event["ss"]
-                    if score == "0-0":
-                        time_str = event.get("time", {}).get("tm", "0")
-                        minute = int(time_str) if time_str else 0
-                        odds = event.get("odds", {}).get("1_2", {}).get("1", "0")
-                        try:
-                            quota = float(odds)
-                        except:
-                            quota = 0.0
-                        if quota >= 1.4 and match_id not in notified_ids:
-                            message = (
-                                f"⚠️ *PARTITA DA MONITORARE LIVE*\n"
-                                f"{event['league']['name']}\n"
-                                f"{event['home']['name']} vs {event['away']['name']}\n"
-                                f"🕒 Minuto: {minute}\n"
-                                f"🔥 Over 0.5 HT: *{prob}%*\n"
-                                f"💸 Quota live: {quota}"
-                            )
-                            send_telegram(message)
-                            save_notified_id(match_id)
-        except Exception as e:
-            print("Errore elaborazione match:", e)
+                            minute = int(ev.get("time", {}).get("tm", 0))
+                            score = ev.get("ss", "0-0")
+                            if score != "0-0":
+                                continue
+
+                            quota = get_1st_half_over05_odds(match_id)
+                            if quota and quota >= MIN_ODDS:
+                                msg = (
+                                    f"⚠️ *PARTITA DA MONITORARE LIVE*\n"
+                                    f"{row['Country']} – {row['League']}\n"
+                                    f"{row['Home Team']} vs {row['Away Team']}\n"
+                                    f"🕒 Minuto: {minute} – Risultato: {score}\n"
+                                    f"🔥 Over 0.5 HT: *{perc:.1f}%* – Quota: {quota}"
+                                )
+                                send_telegram(msg)
+                                save_notified_id(match_id)
+                            break
+                except Exception as e:
+                    print("⚠️ Errore elaborazione match:", e)
+    except FileNotFoundError:
+        print("❌ File matches.csv mancante.")
 
 if __name__ == "__main__":
-    while True:
-        main_loop()
-        time.sleep(60)
+    main()
